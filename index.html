@@ -138,6 +138,70 @@ td:first-child input{text-align:right;}
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 </head>
 <body>
+<div id="licLock" style="display:flex; position:fixed; inset:0; z-index:2147483647; background:var(--bg); color:var(--text); align-items:center; justify-content:center; padding:20px; overflow:auto;">
+  <div style="width:100%; max-width:420px; background:var(--card); border:1px solid var(--border); border-radius:16px; padding:22px; text-align:center;">
+    <div style="font-size:40px;">🔒</div>
+    <h2 style="margin:8px 0 6px;">تفعيل التطبيق</h2>
+    <p style="margin:0 0 14px; font-size:14px; color:var(--muted); line-height:1.7;">ابعت رقم الجهاز ده لصاحب الأداة، وهيبعتلك كود التفعيل.</p>
+    <div id="licDev" dir="ltr" style="font-size:24px; font-weight:700; letter-spacing:2px; padding:12px; border:1px dashed var(--border); border-radius:10px; background:var(--accent-soft); user-select:all;">...</div>
+    <button id="licCopy" style="margin:10px 0 16px; padding:8px 16px; border:1px solid var(--border); background:transparent; color:var(--text); border-radius:8px; font-size:14px; cursor:pointer;">📋 نسخ رقم الجهاز</button>
+    <textarea id="licCode" dir="ltr" rows="4" placeholder="الصق كود التفعيل هنا" style="width:100%; padding:10px; border:1px solid var(--border); border-radius:10px; background:transparent; color:var(--text); font-size:13px; resize:none;"></textarea>
+    <div id="licMsg" style="min-height:20px; margin:6px 0; font-size:13px; color:var(--danger);"></div>
+    <button id="licGo" style="width:100%; padding:12px; border:0; background:var(--accent); color:#fff; border-radius:10px; font-size:16px; font-weight:700; cursor:pointer;">تفعيل</button>
+  </div>
+</div>
+<script>
+(function(){
+  var PUB={"kty":"EC","x":"ZPqcd8AcOgVn36V_BZbmtQ9I7Uv8JwQh5ENPCc0Ey40","y":"Hd-JqPOAOSHXlLo5UX3W-s61BUgEBu7ObxWVj9cQfqY","crv":"P-256"};
+  var K_ID='lic_device_v1', K_CODE='lic_code_v1';
+  var lock=document.getElementById('licLock');
+  function ls(op,k,v){ try{ return op==='g'?localStorage.getItem(k):localStorage.setItem(k,v); }catch(e){ return null; } }
+  function devId(){
+    var id=ls('g',K_ID);
+    if(id) return id;
+    var ch='ABCDEFGHJKLMNPQRSTUVWXYZ23456789', a=new Uint8Array(10), out='';
+    crypto.getRandomValues(a);
+    for(var i=0;i<10;i++){ out+=ch[a[i]%ch.length]; if(i===4) out+='-'; }
+    ls('s',K_ID,out); return out;
+  }
+  function unb64u(s){
+    s=s.replace(/-/g,'+').replace(/_/g,'/'); while(s.length%4) s+='=';
+    var b=atob(s), a=new Uint8Array(b.length);
+    for(var i=0;i<b.length;i++) a[i]=b.charCodeAt(i);
+    return a;
+  }
+  async function verify(id,code){
+    try{
+      code=(code||'').replace(/[^A-Za-z0-9_-]/g,'');
+      var key=await crypto.subtle.importKey('jwk',PUB,{name:'ECDSA',namedCurve:'P-256'},false,['verify']);
+      return await crypto.subtle.verify({name:'ECDSA',hash:'SHA-256'},key,unb64u(code),new TextEncoder().encode('INV1:'+id));
+    }catch(e){ return false; }
+  }
+  function show(){ lock.style.display='flex'; document.documentElement.style.overflow='hidden'; }
+  function hide(){ lock.style.display='none'; document.documentElement.style.overflow=''; }
+  var id=devId();
+  document.getElementById('licDev').textContent=id;
+  document.getElementById('licCopy').onclick=function(){
+    var b=this;
+    (navigator.clipboard?navigator.clipboard.writeText(id):Promise.reject()).then(function(){ b.textContent='✅ اتنسخ'; },function(){
+      var r=document.createRange(); r.selectNodeContents(document.getElementById('licDev'));
+      var sel=getSelection(); sel.removeAllRanges(); sel.addRange(r); b.textContent='حدد الرقم وانسخه';
+    });
+  };
+  document.getElementById('licGo').onclick=async function(){
+    var msg=document.getElementById('licMsg'); msg.textContent='';
+    var code=document.getElementById('licCode').value;
+    if(!window.crypto||!crypto.subtle){ msg.textContent='المتصفح ده مش بيدعم التفعيل.'; return; }
+    if(await verify(id,code)){ ls('s',K_CODE,code.replace(/\s+/g,'')); hide(); }
+    else msg.textContent='الكود غلط أو مش خاص بالجهاز ده.';
+  };
+  var saved=ls('g',K_CODE);
+  if(saved){
+    hide();
+    verify(id,saved).then(function(ok){ if(!ok) show(); });
+  } else { show(); }
+})();
+</script>
 <div class="wrap">
   <h1 class="page-title no-print">🧾 إنشاء فاتورة</h1>
 

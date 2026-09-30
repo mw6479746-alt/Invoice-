@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<title>توليد أكواد التفعيل</title>
+<style>
+:root{--bg:#14161f;--card:#1d2030;--text:#eef0f6;--muted:#9aa0b4;--accent:#4fa3a3;--border:#30334a;--danger:#f87171;--ok:#4ade80;}
+*{box-sizing:border-box;}
+body{margin:0;background:var(--bg);color:var(--text);font-family:'Segoe UI',Tahoma,Arial,sans-serif;padding:20px 16px;}
+.box{max-width:520px;margin:0 auto;background:var(--card);border:1px solid var(--border);border-radius:14px;padding:18px;}
+h1{font-size:20px;margin:0 0 14px;}
+label{display:block;font-size:13px;color:var(--muted);margin:14px 0 6px;}
+input,textarea{width:100%;padding:10px;border:1px solid var(--border);border-radius:10px;background:transparent;color:var(--text);font-size:15px;}
+textarea{resize:none;font-size:12px;}
+button{padding:11px 14px;border:0;border-radius:10px;background:var(--accent);color:#fff;font-size:15px;font-weight:700;cursor:pointer;}
+button.sec{background:transparent;border:1px solid var(--border);color:var(--text);font-weight:400;}
+.row{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px;}
+.msg{min-height:20px;margin-top:10px;font-size:13px;}
+.ltr{direction:ltr;text-align:left;}
+</style>
+</head>
+<body>
+<div class="box">
+  <h1>🔑 توليد كود تفعيل</h1>
+
+  <div id="keyBox">
+    <label>المفتاح السري (من ملف admin-private-key.txt)</label>
+    <textarea id="prv" class="ltr" rows="4" placeholder="الصق المفتاح السري هنا"></textarea>
+    <label style="display:flex;gap:8px;align-items:center;margin:8px 0 0;">
+      <input type="checkbox" id="remember" style="width:auto;"> احفظ المفتاح على الجهاز ده (موبايلك أنت بس)
+    </label>
+  </div>
+  <div id="savedBox" style="display:none;">
+    <div style="font-size:14px;color:var(--ok);">✅ المفتاح محفوظ على الجهاز ده</div>
+    <div class="row"><button class="sec" onclick="forgetKey()">نسيان المفتاح</button></div>
+  </div>
+
+  <label>رقم جهاز العميل</label>
+  <input id="dev" class="ltr" placeholder="XXXXX-XXXXX" autocapitalize="characters" autocomplete="off">
+
+  <div class="row"><button onclick="gen()">توليد الكود</button></div>
+  <div class="msg" id="msg"></div>
+
+  <div id="outBox" style="display:none;">
+    <label>كود التفعيل (ابعته للعميل)</label>
+    <textarea id="out" class="ltr" rows="4" readonly></textarea>
+    <div class="row">
+      <button onclick="copyOut()">📋 نسخ</button>
+      <button class="sec" onclick="shareOut()">📤 مشاركة</button>
+    </div>
+  </div>
+</div>
+<script>
+var K='lic_admin_prv_v1';
+function ls(op,k,v){ try{ return op==='g'?localStorage.getItem(k):op==='s'?localStorage.setItem(k,v):localStorage.removeItem(k); }catch(e){ return null; } }
+function b64u(buf){ var a=new Uint8Array(buf),s=''; for(var i=0;i<a.length;i++) s+=String.fromCharCode(a[i]); return btoa(s).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,''); }
+function refresh(){
+  var has=!!ls('g',K);
+  document.getElementById('keyBox').style.display=has?'none':'block';
+  document.getElementById('savedBox').style.display=has?'block':'none';
+}
+function forgetKey(){ if(confirm('تمسح المفتاح من الجهاز ده؟ هتحتاج تلصقه تاني.')){ ls('d',K); refresh(); } }
+function setMsg(t,ok){ var m=document.getElementById('msg'); m.textContent=t; m.style.color=ok?'var(--ok)':'var(--danger)'; }
+function normId(v){
+  v=(v||'').toUpperCase().replace(/[^A-Z0-9]/g,'');
+  if(v.length!==10) return null;
+  return v.slice(0,5)+'-'+v.slice(5);
+}
+async function gen(){
+  setMsg('');
+  document.getElementById('outBox').style.display='none';
+  var id=normId(document.getElementById('dev').value);
+  if(!id){ setMsg('رقم الجهاز لازم يكون 10 حروف وأرقام (XXXXX-XXXXX).'); return; }
+  var raw=ls('g',K)||document.getElementById('prv').value.trim();
+  if(!raw){ setMsg('الصق المفتاح السري الأول.'); return; }
+  try{
+    var jwk=JSON.parse(raw);
+    var key=await crypto.subtle.importKey('jwk',jwk,{name:'ECDSA',namedCurve:'P-256'},false,['sign']);
+    var sig=await crypto.subtle.sign({name:'ECDSA',hash:'SHA-256'},key,new TextEncoder().encode('INV1:'+id));
+    if(!ls('g',K) && document.getElementById('remember').checked){ ls('s',K,raw); document.getElementById('prv').value=''; refresh(); }
+    document.getElementById('out').value=b64u(sig);
+    document.getElementById('outBox').style.display='block';
+    setMsg('تم توليد الكود للجهاز '+id,true);
+  }catch(e){ setMsg('المفتاح غير صالح أو ناقص. اتأكد إنك لصقته كامل.'); }
+}
+function copyOut(){
+  var t=document.getElementById('out'); t.select();
+  (navigator.clipboard?navigator.clipboard.writeText(t.value):Promise.reject()).then(function(){ setMsg('اتنسخ ✅',true); },function(){ document.execCommand('copy'); setMsg('اتنسخ ✅',true); });
+}
+function shareOut(){
+  var v=document.getElementById('out').value;
+  if(navigator.share) navigator.share({text:v}).catch(function(){}); else copyOut();
+}
+refresh();
+</script>
+</body>
+</html>
