@@ -146,6 +146,13 @@ td:first-child input{text-align:right;}
     <button class="tab-btn" id="tabLedgerBtn" onclick="switchView('ledger')">📒 حسابات العملاء</button>
   </div>
 
+  <div class="no-print" style="display:flex; gap:8px; flex-wrap:wrap; align-items:center; margin:-4px 0 16px; font-size:13px;">
+    <span style="color:var(--muted);">نسخة احتياطية:</span>
+    <button class="btn btn-secondary" style="padding:6px 12px; font-size:13px;" onclick="exportBackup()">⬇️ تصدير البيانات</button>
+    <button class="btn btn-secondary" style="padding:6px 12px; font-size:13px;" onclick="document.getElementById('backupFile').click()">⬆️ استيراد البيانات</button>
+    <input type="file" id="backupFile" style="display:none" onchange="importBackup(this)">
+  </div>
+
   <div id="invoiceView">
   <div id="editBanner" class="no-print" style="display:none; align-items:center; justify-content:space-between; gap:10px; background:var(--gold); color:#3a2c00; border-radius:10px; padding:10px 14px; margin-bottom:14px; font-size:13.5px; font-weight:700;">
     <span>✏️ بتعدل الفاتورة رقم <span id="editingInvLabel"></span> — أي تغيير هيتحدث في حساب العميل أوتوماتيك</span>
@@ -265,6 +272,49 @@ td:first-child input{text-align:right;}
 </div>
 
 <script>
+/* ===== نسخة احتياطية ===== */
+const BACKUP_KEYS=['orders','customers','products','fromProfiles','savedLogo','invoiceDraftV2'];
+async function exportBackup(){
+  try{
+    const data={};
+    BACKUP_KEYS.forEach(k=>{ const v=localStorage.getItem(k); if(v!==null) data[k]=v; });
+    if(!Object.keys(data).length){ alert('مفيش بيانات محفوظة لسه عشان تتصدّر.'); return; }
+    const payload={app:'invoice-maker',version:1,date:new Date().toISOString(),data:data};
+    const d=new Date(), pad=n=>String(n).padStart(2,'0');
+    const name='invoice-backup-'+d.getFullYear()+pad(d.getMonth()+1)+pad(d.getDate())+'.json';
+    const blob=new Blob([JSON.stringify(payload)],{type:'application/json'});
+    const file=new File([blob],name,{type:'application/json'});
+    if(navigator.canShare && navigator.canShare({files:[file]})){
+      try{ await navigator.share({files:[file],title:'نسخة احتياطية - فاتورة'}); return; }
+      catch(e){ if(e && e.name==='AbortError') return; }
+    }
+    const a=document.createElement('a');
+    a.href=URL.createObjectURL(blob); a.download=name;
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(()=>URL.revokeObjectURL(a.href),4000);
+    alert('تم حفظ النسخة الاحتياطية: '+name);
+  }catch(err){ alert('حصل خطأ أثناء التصدير: '+err.message); }
+}
+function importBackup(input){
+  const f=input.files && input.files[0];
+  input.value='';
+  if(!f) return;
+  const r=new FileReader();
+  r.onload=function(){
+    try{
+      const obj=JSON.parse(r.result);
+      if(!obj || obj.app!=='invoice-maker' || !obj.data) throw new Error('الملف ده مش نسخة احتياطية من الأداة');
+      if(!confirm('الاستيراد هيستبدل البيانات الحالية (الأوردرات والعملاء والمنتجات) ببيانات الملف. تكمل؟')) return;
+      BACKUP_KEYS.forEach(k=>{
+        if(typeof obj.data[k]==='string') localStorage.setItem(k,obj.data[k]);
+      });
+      alert('تم استرجاع البيانات بنجاح ✅');
+      location.reload();
+    }catch(err){ alert('تعذر الاستيراد: '+err.message); }
+  };
+  r.onerror=function(){ alert('تعذر قراءة الملف'); };
+  r.readAsText(f);
+}
 let editingOrderId = null;
 let logoData = '';
 function handleLogo(evt){

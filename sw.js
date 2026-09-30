@@ -1,4 +1,4 @@
-const CACHE = 'invoice-v1'; // غيّر الرقم عند كل تحديث للأداة
+const CACHE = 'invoice-v2'; // غيّر الرقم عند كل تحديث للأداة
 const FILES = ['./', './index.html', './manifest.json',
   './icon-192.png', './icon-512.png',
   './icon-maskable-512.png', './apple-touch-icon.png'];
