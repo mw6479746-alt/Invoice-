@@ -125,6 +125,8 @@ td:first-child input{text-align:right;}
 .order-row input{width:80px; padding:5px 6px; border:1px solid var(--border); border-radius:6px; background:transparent; color:var(--text); text-align:center;}
 .order-row .del-order{background:none; border:none; color:var(--danger); cursor:pointer; font-size:14px;}
 .empty-note{color:var(--muted); font-size:13.5px; text-align:center; padding:30px 0;}
+#payLine{display:none; margin-top:10px; padding:10px 12px; border-radius:8px; border:1px solid var(--border); border-inline-start:5px solid var(--gold); font-size:13.5px; line-height:1.9;}
+#payLine.pf{border-inline-start-color:var(--accent);} #payLine.pu{border-inline-start-color:var(--danger);}
 @media print{
   body{background:#fff; padding:0;}
   .no-print{display:none !important;}
@@ -214,6 +216,7 @@ td:first-child input{text-align:right;}
     <span style="color:var(--muted);">نسخة احتياطية:</span>
     <button class="btn btn-secondary" style="padding:6px 12px; font-size:13px;" onclick="exportBackup()">⬇️ تصدير البيانات</button>
     <button class="btn btn-secondary" style="padding:6px 12px; font-size:13px;" onclick="document.getElementById('backupFile').click()">⬆️ استيراد البيانات</button>
+    <button class="btn btn-secondary" style="padding:6px 12px; font-size:13px;" onclick="pasteImport()">📋 استيراد بلصق النص</button>
     <input type="file" id="backupFile" style="display:none" onchange="importBackup(this)">
   </div>
 
@@ -299,6 +302,7 @@ td:first-child input{text-align:right;}
       <span class="label">المجموع</span>
       <span class="amount"><span id="currency">EGP</span> <span id="grandTotal">0</span></span>
     </div>
+    <div id="payLine"></div>
 
     <div class="terms">
       <h4>📋 الشروط والأحكام</h4>
@@ -311,13 +315,14 @@ td:first-child input{text-align:right;}
   </div>
 
   <div class="no-print" id="paymentStatusBox" style="display:flex; gap:8px; align-items:center; flex-wrap:wrap; margin-top:16px; background:var(--card); border:1px solid var(--border); border-radius:10px; padding:10px 12px;">
-    <span style="font-size:13px; color:var(--muted);">حالة السداد (داخلي، مش هيظهر للعميل):</span>
+    <span style="font-size:13px; color:var(--muted);">حالة السداد (بتظهر في الفاتورة اللي بتتبعت للعميل):</span>
     <select id="paymentStatus" onchange="togglePartialInput()" style="padding:6px 8px; border:1px solid var(--border); border-radius:6px; background:transparent; color:var(--text); font-size:13px;">
       <option value="unpaid">لسه ماخدتش فلوس</option>
       <option value="full">اتسدد بالكامل</option>
       <option value="partial">دفع جزء بس</option>
     </select>
-    <input type="number" id="partialPaidAmount" placeholder="المبلغ المدفوع" style="display:none; width:110px; padding:6px 8px; border:1px solid var(--border); border-radius:6px; background:transparent; color:var(--text);">
+    <input type="number" id="partialPaidAmount" oninput="updatePayLine()" placeholder="المبلغ المدفوع" style="display:none; width:110px; padding:6px 8px; border:1px solid var(--border); border-radius:6px; background:transparent; color:var(--text);">
+    <label style="font-size:13px; display:flex; align-items:center; gap:4px;"><input type="checkbox" id="showPay" checked onchange="updatePayLine()"> إظهار في الفاتورة</label>
   </div>
 
   <div class="actions no-print">
@@ -359,26 +364,34 @@ async function exportBackup(){
     alert('تم حفظ النسخة الاحتياطية: '+name);
   }catch(err){ alert('حصل خطأ أثناء التصدير: '+err.message); }
 }
+function applyBackup(txt){
+  try{
+    const obj=JSON.parse(txt);
+    if(!obj || obj.app!=='invoice-maker' || !obj.data) throw new Error('الملف ده مش نسخة احتياطية من الأداة');
+    if(!confirm('الاستيراد هيستبدل البيانات الحالية (الأوردرات والعملاء والمنتجات) ببيانات الملف. تكمل؟')) return;
+    BACKUP_KEYS.forEach(k=>{ if(typeof obj.data[k]==='string') localStorage.setItem(k,obj.data[k]); });
+    alert('تم استرجاع البيانات بنجاح ✅');
+    location.reload();
+  }catch(err){ alert('تعذر الاستيراد: '+err.message); }
+}
 function importBackup(input){
   const f=input.files && input.files[0];
   input.value='';
   if(!f) return;
   const r=new FileReader();
-  r.onload=function(){
-    try{
-      const obj=JSON.parse(r.result);
-      if(!obj || obj.app!=='invoice-maker' || !obj.data) throw new Error('الملف ده مش نسخة احتياطية من الأداة');
-      if(!confirm('الاستيراد هيستبدل البيانات الحالية (الأوردرات والعملاء والمنتجات) ببيانات الملف. تكمل؟')) return;
-      BACKUP_KEYS.forEach(k=>{
-        if(typeof obj.data[k]==='string') localStorage.setItem(k,obj.data[k]);
-      });
-      alert('تم استرجاع البيانات بنجاح ✅');
-      location.reload();
-    }catch(err){ alert('تعذر الاستيراد: '+err.message); }
-  };
+  r.onload=function(){ applyBackup(r.result); };
   r.onerror=function(){ alert('تعذر قراءة الملف'); };
   r.readAsText(f);
 }
+function pasteImport(){
+  var d=document.createElement('div');
+  d.style.cssText='position:fixed;inset:0;z-index:99999;background:rgba(0,0,0,.6);display:flex;align-items:center;justify-content:center;padding:16px';
+  d.innerHTML='<div style="background:var(--card);color:var(--text);border:1px solid var(--border);border-radius:14px;padding:16px;width:100%;max-width:440px"><div style="font-weight:700;margin-bottom:8px">الصق محتوى ملف النسخة الاحتياطية</div><textarea id="pasteBk" dir="ltr" rows="8" style="width:100%;padding:8px;border:1px solid var(--border);border-radius:8px;background:transparent;color:var(--text);font-size:12px"></textarea><div style="display:flex;gap:8px;margin-top:10px"><button id="pbGo" style="flex:1;padding:10px;border:0;border-radius:8px;background:var(--accent);color:#fff;font-weight:700">استيراد</button><button id="pbX" style="flex:1;padding:10px;border:1px solid var(--border);border-radius:8px;background:transparent;color:var(--text)">إلغاء</button></div></div>';
+  document.body.appendChild(d);
+  d.querySelector('#pbX').onclick=function(){d.remove()};
+  d.querySelector('#pbGo').onclick=function(){var v=d.querySelector('#pasteBk').value.trim();if(!v)return;d.remove();applyBackup(v)};
+}
+try{ if(navigator.storage && navigator.storage.persist) navigator.storage.persist(); }catch(e){}
 let editingOrderId = null;
 let logoData = '';
 function handleLogo(evt){
@@ -421,6 +434,27 @@ function syncTitle(){
 function togglePartialInput(){
   const status = document.getElementById('paymentStatus').value;
   document.getElementById('partialPaidAmount').style.display = status === 'partial' ? 'inline-block' : 'none';
+  updatePayLine();
+}
+function updatePayLine(){
+  const el = document.getElementById('payLine');
+  if(!el) return;
+  const status = document.getElementById('paymentStatus').value;
+  const show = document.getElementById('showPay').checked;
+  const total = parseFloat((document.getElementById('grandTotal').textContent||'0').replace(/,/g,'')) || 0;
+  const cur = document.getElementById('currency').textContent;
+  const f = n => n.toLocaleString();
+  if(!show){ el.style.display = 'none'; return; }
+  let paid = status === 'full' ? total : status === 'partial' ? Math.min(Math.max(parseFloat(document.getElementById('partialPaidAmount').value)||0, 0), total) : 0;
+  const rem = Math.max(total - paid, 0);
+  if(status === 'full'){
+    el.className = 'pf'; el.innerHTML = '<b>حالة السداد:</b> ✅ تم السداد بالكامل';
+  } else if(status === 'partial'){
+    el.className = ''; el.innerHTML = '<b>حالة السداد:</b> 🔶 سداد جزئي<br>المدفوع: <b>' + cur + ' ' + f(paid) + '</b> &nbsp;•&nbsp; المتبقي: <b>' + cur + ' ' + f(rem) + '</b>';
+  } else {
+    el.className = 'pu'; el.innerHTML = '<b>حالة السداد:</b> ⏳ لم يتم السداد بعد<br>المتبقي: <b>' + cur + ' ' + f(rem) + '</b>';
+  }
+  el.style.display = 'block';
 }
 
 function getCustomerBalance(name){
@@ -787,6 +821,7 @@ function calc(){
   const discount = parseFloat(document.getElementById('discount').value) || 0;
   const grand = subtotal + subtotal*(taxPct/100) - discount;
   document.getElementById('grandTotal').textContent = grand.toLocaleString();
+  updatePayLine();
 }
 
 function collectData(){
